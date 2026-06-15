@@ -1,0 +1,43 @@
+name: build-and-test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build and test (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          make check
+          make initrom userom
+
+      # macOS: Apple's linker has no -lrt and rejects the Makefile's -s flag, so
+      # override CFLAGS/LDFLAGS.  initrom/userom are skipped: they need SysV
+      # shared memory, and OpenMP isn't bundled with Apple's clang.
+      - name: Build and test (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          make check \
+            CFLAGS="-Wall -O2 -fomit-frame-pointer -DSKIP_MEMZERO" \
+            OMPFLAGS_MAYBE="" LDFLAGS=""
+
+      # Windows: build and test with the MSVC toolchain via build.ps1.  The
+      # "check" target builds tests.exe and phc-test.exe, runs them, and
+      # verifies their output against TESTS-OK / PHC-TEST-OK-SHA256
+      - name: Build and test (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: .\build.ps1 -Target check
